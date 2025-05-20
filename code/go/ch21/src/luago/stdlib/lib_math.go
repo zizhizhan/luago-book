@@ -74,8 +74,11 @@ func mathRandom(ls LuaState) int {
 	ls.ArgCheck(low <= up, 1, "interval is empty")
 	ls.ArgCheck(low >= 0 || up <= math.MaxInt64+low, 1,
 		"interval too large")
-	r := low + rand.Int63n(up-low)
-	ls.PushInteger(r)
+	if up-low == math.MaxInt64 {
+		ls.PushInteger(low + rand.Int63())
+	} else {
+		ls.PushInteger(low + rand.Int63n(up-low+1))
+	}
 	return 1
 }
 
@@ -277,7 +280,7 @@ func mathFmod(ls LuaState) int {
 	} else {
 		x := ls.CheckNumber(1)
 		y := ls.CheckNumber(2)
-		ls.PushNumber(math.Remainder(x, y))
+		ls.PushNumber(x - math.Trunc(x/y)*y)
 	}
 
 	return 1
@@ -294,7 +297,11 @@ func mathModf(ls LuaState) int {
 		x := ls.CheckNumber(1)
 		i, f := math.Modf(x)
 		_pushNumInt(ls, i)
-		ls.PushNumber(f)
+		if math.IsInf(x, 0) {
+			ls.PushNumber(0)
+		} else {
+			ls.PushNumber(f)
+		}
 	}
 
 	return 2

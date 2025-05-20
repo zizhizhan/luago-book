@@ -29,9 +29,10 @@ exp8  ::= exp7 {‘~’ exp7}
 exp7  ::= exp6 {‘&’ exp6}
 exp6  ::= exp5 {(‘<<’ | ‘>>’) exp5}
 exp5  ::= exp4 {‘..’ exp4}
-exp4  ::= exp3 {(‘+’ | ‘-’ | ‘*’ | ‘/’ | ‘//’ | ‘%’) exp3}
+exp4  ::= exp3 {(‘+’ | ‘-’) exp3}
+exp3  ::= exp2 {(‘*’ | ‘/’ | ‘//’ | ‘%’) exp2}
 exp2  ::= {(‘not’ | ‘#’ | ‘-’ | ‘~’)} exp1
-exp1  ::= exp0 {‘^’ exp0}
+exp1  ::= exp0 {‘^’ exp2}
 exp0  ::= nil | false | true | Numeral | LiteralString
 		| ‘...’ | functiondef | prefixexp | tableconstructor
 */
@@ -56,8 +57,7 @@ func parseExp11(lexer *Lexer) Exp {
 	for lexer.LookAhead() == TOKEN_OP_AND {
 		line, op, _ := lexer.NextToken()
 		land := &BinopExp{line, op, exp, parseExp10(lexer)}
-		last := lexer.LookAhead() != TOKEN_OP_AND // todo
-		exp = optimizeLogicalAnd(land, last)
+		exp = optimizeLogicalAnd(land)
 	}
 	return exp
 }
@@ -191,7 +191,7 @@ func parseExp1(lexer *Lexer) Exp { // pow is right associative
 	exp := parseExp0(lexer)
 	if lexer.LookAhead() == TOKEN_OP_POW {
 		line, op, _ := lexer.NextToken()
-		exp = &BinopExp{line, op, exp, parseExp1(lexer)}
+		exp = &BinopExp{line, op, exp, parseExp2(lexer)}
 	}
 	return optimizePow(exp)
 }

@@ -59,16 +59,15 @@ func _eq(a, b luaValue) bool {
 func _lt(a, b luaValue) bool {
 	switch x := a.(type) {
 	case string:
-		y, ok := b.(string)
-		return ok && x < y
+		if y, ok := b.(string); ok {
+			return x < y
+		}
 	case int64:
 		switch y := b.(type) {
 		case int64:
 			return x < y
 		case float64:
 			return float64(x) < y
-		default:
-			return false
 		}
 	case float64:
 		switch y := b.(type) {
@@ -76,27 +75,23 @@ func _lt(a, b luaValue) bool {
 			return x < y
 		case int64:
 			return x < float64(y)
-		default:
-			return false
 		}
-	default:
-		panic("comparison error!")
 	}
+	panic("comparison error!")
 }
 
 func _le(a, b luaValue) bool {
 	switch x := a.(type) {
 	case string:
-		y, ok := b.(string)
-		return ok && x <= y
+		if y, ok := b.(string); ok {
+			return x <= y
+		}
 	case int64:
 		switch y := b.(type) {
 		case int64:
 			return x <= y
 		case float64:
 			return float64(x) <= y
-		default:
-			return false
 		}
 	case float64:
 		switch y := b.(type) {
@@ -104,10 +99,7 @@ func _le(a, b luaValue) bool {
 			return x <= y
 		case int64:
 			return x <= float64(y)
-		default:
-			return false
 		}
-	default:
-		panic("comparison error!")
 	}
+	panic("comparison error!")
 }

@@ -1,4 +1,20 @@
+# Go
 pkg/
 bin/
-*.DS_Store
+
+# IDEA
+*.iml
+.idea/
+out/
+
+# Gradle
+.gradle/
+build/
+
+# Cargo
+target/
+
+# Others
+# *.luac
 luac.out
+*.DS_Store

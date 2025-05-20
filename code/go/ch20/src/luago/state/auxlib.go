@@ -80,7 +80,7 @@ func (self *luaState) CheckNumber(arg int) float64 {
 // http://www.lua.org/manual/5.3/manual.html#luaL_checkstring
 // http://www.lua.org/manual/5.3/manual.html#luaL_checklstring
 func (self *luaState) CheckString(arg int) string {
-	s, ok := self.ToString(arg)
+	s, ok := self.ToStringX(arg)
 	if !ok {
 		self.tagError(arg, LUA_TSTRING)
 	}
@@ -117,15 +117,15 @@ func (self *luaState) OptString(arg int, def string) string {
 // [-0, +?, e]
 // http://www.lua.org/manual/5.3/manual.html#luaL_dofile
 func (self *luaState) DoFile(filename string) bool {
-	return self.LoadFile(filename) == LUA_OK &&
-		self.PCall(0, LUA_MULTRET, 0) == LUA_OK
+	return self.LoadFile(filename) != LUA_OK ||
+		self.PCall(0, LUA_MULTRET, 0) != LUA_OK
 }
 
 // [-0, +?, –]
 // http://www.lua.org/manual/5.3/manual.html#luaL_dostring
 func (self *luaState) DoString(str string) bool {
-	return self.LoadString(str) == LUA_OK &&
-		self.PCall(0, LUA_MULTRET, 0) == LUA_OK
+	return self.LoadString(str) != LUA_OK ||
+		self.PCall(0, LUA_MULTRET, 0) != LUA_OK
 }
 
 // [-0, +1, m]
@@ -138,7 +138,7 @@ func (self *luaState) LoadFile(filename string) int {
 // http://www.lua.org/manual/5.3/manual.html#luaL_loadfilex
 func (self *luaState) LoadFileX(filename, mode string) int {
 	if data, err := ioutil.ReadFile(filename); err == nil {
-		return self.Load(data, filename, mode)
+		return self.Load(data, "@" + filename, mode)
 	}
 	return LUA_ERRFILE
 }
@@ -336,7 +336,7 @@ func (self *luaState) tagError(arg int, tag LuaType) {
 func (self *luaState) typeError(arg int, tname string) int {
 	var typeArg string /* name for the type of the actual argument */
 	if self.GetMetafield(arg, "__name") == LUA_TSTRING {
-		typeArg, _ = self.ToString(-1) /* use the given type name */
+		typeArg = self.ToString(-1) /* use the given type name */
 	} else if self.Type(arg) == LUA_TLIGHTUSERDATA {
 		typeArg = "light userdata" /* special name for messages */
 	} else {

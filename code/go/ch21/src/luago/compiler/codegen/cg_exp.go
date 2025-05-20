@@ -152,7 +152,7 @@ func cgBinopExp(fi *funcInfo, node *BinopExp, a int) {
 		} else {
 			fi.emitTestSet(node.Line, a, b, 1)
 		}
-		pcOfJmp := fi.emitJmp(node.Line, 0)
+		pcOfJmp := fi.emitJmp(node.Line, 0, 0)
 
 		b, _ = expToOpArg(fi, node.Exp2, ARG_REG)
 		fi.usedRegs = oldRegs
@@ -229,8 +229,11 @@ func prepFuncCall(fi *funcInfo, node *FuncCallExp, a int) int {
 	cgExp(fi, node.PrefixExp, a, 1)
 	if node.NameExp != nil {
 		fi.allocReg()
-		c, _ := expToOpArg(fi, node.NameExp, ARG_RK)
+		c, k := expToOpArg(fi, node.NameExp, ARG_RK)
 		fi.emitSelf(node.Line, a, a, c)
+		if k == ARG_REG {
+			fi.freeRegs(1)
+		}
 	}
 	for i, arg := range node.Args {
 		tmp := fi.allocReg()

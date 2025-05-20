@@ -1,8 +1,9 @@
 package stdlib
 
 import "fmt"
+import "strconv"
+import "strings"
 import . "luago/api"
-import "luago/number"
 
 var baseFuncs = map[string]GoFunction{
 	"print":        basePrint,
@@ -55,7 +56,7 @@ func basePrint(ls LuaState) int {
 		ls.PushValue(-1) /* function to be called */
 		ls.PushValue(i)  /* value to print */
 		ls.Call(1, 1)
-		s, ok := ls.ToString(-1) /* get result */
+		s, ok := ls.ToStringX(-1) /* get result */
 		if !ok {
 			return ls.Error2("'tostring' must return a string to 'print'")
 		}
@@ -174,15 +175,15 @@ func baseNext(ls LuaState) int {
 // lua-5.3.4/src/lbaselib.c#luaB_load()
 func baseLoad(ls LuaState) int {
 	var status int
-	s, isStr := ls.ToString(1)
+	chunk, isStr := ls.ToStringX(1)
 	mode := ls.OptString(3, "bt")
 	env := 0 /* 'env' index or 0 if no 'env' */
 	if !ls.IsNone(4) {
 		env = 4
 	}
 	if isStr { /* loading a string? */
-		chunkname := ls.OptString(2, s)
-		status = ls.Load([]byte(s), chunkname, mode)
+		chunkname := ls.OptString(2, chunk)
+		status = ls.Load([]byte(chunk), chunkname, mode)
 	} else { /* loading from a reader function */
 		panic("loading from a reader function") // todo
 	}
@@ -221,15 +222,13 @@ func baseLoadFile(ls LuaState) int {
 // http://www.lua.org/manual/5.3/manual.html#pdf-dofile
 // lua-5.3.4/src/lbaselib.c#luaB_dofile()
 func baseDoFile(ls LuaState) int {
-	fname := ls.OptString(1, "")
+	fname := ls.OptString(1, "bt")
 	ls.SetTop(1)
 	if ls.LoadFile(fname) != LUA_OK {
-		//return lua_error(L);
-		panic("todo!")
+		return ls.Error()
 	}
-	//ls.CallK(0, LUA_MULTRET, 0, dofilecont);
-	//return dofilecont(L, 0, 0);
-	panic("todo!")
+	ls.Call(0, LUA_MULTRET)
+	return ls.GetTop() - 1
 }
 
 // pcall (f [, arg1, ···])
@@ -237,19 +236,15 @@ func baseDoFile(ls LuaState) int {
 func basePCall(ls LuaState) int {
 	nArgs := ls.GetTop() - 1
 	status := ls.PCall(nArgs, -1, 0)
-	if status == LUA_OK {
-		ls.PushBoolean(true)
-	} else {
-		ls.PushBoolean(false)
-	}
-	ls.Rotate(1, 1)
+	ls.PushBoolean(status == LUA_OK)
+	ls.Insert(1)
 	return ls.GetTop()
 }
 
 // xpcall (f, msgh [, arg1, ···])
 // http://www.lua.org/manual/5.3/manual.html#pdf-xpcall
 func baseXPCall(ls LuaState) int {
-	panic("todo! baseXPCall")
+	panic("todo!")
 }
 
 // getmetatable (object)
@@ -355,18 +350,18 @@ func baseToNumber(ls LuaState) int {
 			ls.SetTop(1) /* yes; return it */
 			return 1
 		} else {
-			if s, ok := ls.ToString(1); ok {
-				if ok && ls.StringToNumber(s) {
+			if s, ok := ls.ToStringX(1); ok {
+				if ls.StringToNumber(s) {
 					return 1 /* successful conversion to number */
 				} /* else not a number */
 			}
 		}
 	} else {
 		ls.CheckType(1, LUA_TSTRING) /* no numbers as strings */
-		s, _ := ls.ToString(1)
+		s := strings.TrimSpace(ls.ToString(1))
 		base := int(ls.CheckInteger(2))
 		ls.ArgCheck(2 <= base && base <= 36, 2, "base out of range")
-		if n, ok := number.ParseInteger(s); ok {
+		if n, err := strconv.ParseInt(s, base, 64); err == nil {
 			ls.PushInteger(n)
 			return 1
 		} /* else not a number */

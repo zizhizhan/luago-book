@@ -5,8 +5,8 @@ import "luago/number"
 
 type luaTable struct {
 	metatable *luaTable
-	_map      map[luaValue]luaValue
 	arr       []luaValue
+	_map      map[luaValue]luaValue
 }
 
 func newLuaTable(nArr, nRec int) *luaTable {
@@ -30,17 +30,16 @@ func (self *luaTable) len() int {
 }
 
 func (self *luaTable) get(key luaValue) luaValue {
-	key = _floatToIntger(key)
-	if idx, ok := key.(int64); ok && idx >= 1 {
-		arrLen := int64(len(self.arr))
-		if idx <= arrLen {
+	key = _floatToInteger(key)
+	if idx, ok := key.(int64); ok {
+		if idx >= 1 && idx <= int64(len(self.arr)) {
 			return self.arr[idx-1]
 		}
 	}
 	return self._map[key]
 }
 
-func _floatToIntger(key luaValue) luaValue {
+func _floatToInteger(key luaValue) luaValue {
 	if f, ok := key.(float64); ok {
 		if i, ok := number.FloatToInteger(f); ok {
 			return i
@@ -57,7 +56,7 @@ func (self *luaTable) put(key, val luaValue) {
 		panic("table index is NaN!")
 	}
 
-	key = _floatToIntger(key)
+	key = _floatToInteger(key)
 	if idx, ok := key.(int64); ok && idx >= 1 {
 		arrLen := int64(len(self.arr))
 		if idx <= arrLen {
@@ -90,6 +89,8 @@ func (self *luaTable) _shrinkArray() {
 	for i := len(self.arr) - 1; i >= 0; i-- {
 		if self.arr[i] == nil {
 			self.arr = self.arr[0:i]
+		} else {
+			break
 		}
 	}
 }

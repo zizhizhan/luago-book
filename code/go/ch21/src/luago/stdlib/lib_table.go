@@ -4,6 +4,8 @@ import "sort"
 import "strings"
 import . "luago/api"
 
+const MAX_LEN = 1000000 // TODO
+
 /*
 ** Operations that an object must define to mimic a table
 ** (some functions only need some of them)
@@ -123,13 +125,13 @@ func tabConcat(ls LuaState) int {
 	}
 
 	buf := make([]string, j-i+1)
-	for k := i; k <= j; k++ {
+	for k := i; k > 0 && k <= j; k++ {
 		ls.GetI(1, k)
 		if !ls.IsString(-1) {
 			ls.Error2("invalid value (%s) at index %d in table for 'concat'",
 				ls.TypeName2(-1), i)
 		}
-		buf[k-1], _ = ls.ToString(-1)
+		buf[k-i] = ls.ToString(-1)
 		ls.Pop(1)
 	}
 	ls.PushString(strings.Join(buf, sep))
@@ -192,11 +194,12 @@ func tabUnpack(ls LuaState) int {
 	if i > e { /* empty range */
 		return 0
 	}
-	// n = (lua_Unsigned)e - i;  /* number of elements minus 1 (avoid overflows) */
-	// if (n >= (unsigned int)INT_MAX  || !lua_checkstack(L, (int)(++n)))
-	//   return luaL_error(L, "too many results to unpack");
+
 	n := int(e - i + 1)
-	ls.CheckStack(n)
+	if n <= 0 || n >= MAX_LEN || !ls.CheckStack(n) {
+		return ls.Error2("too many results to unpack")
+	}
+
 	for ; i < e; i++ { /* push arg[i..e - 1] (to avoid overflows) */
 		ls.GetI(1, i)
 	}
@@ -209,7 +212,9 @@ func tabUnpack(ls LuaState) int {
 // table.sort (list [, comp])
 // http://www.lua.org/manual/5.3/manual.html#pdf-table.sort
 func tabSort(ls LuaState) int {
-	sort.Sort(wrapper{ls})
+	w := wrapper{ls}
+	ls.ArgCheck(w.Len() < MAX_LEN, 1, "array too big")
+	sort.Sort(w)
 	return 0
 }
 
@@ -223,7 +228,7 @@ func (self wrapper) Len() int {
 
 func (self wrapper) Less(i, j int) bool {
 	ls := self.ls
-	if ls.GetTop() == 2 { // cmp is given
+	if ls.IsFunction(2) { // cmp is given
 		ls.PushValue(2)
 		ls.GetI(1, int64(i+1))
 		ls.GetI(1, int64(j+1))

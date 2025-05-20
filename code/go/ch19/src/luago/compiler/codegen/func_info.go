@@ -26,12 +26,13 @@ type upvalInfo struct {
 }
 
 type locVarInfo struct {
-	prev    *locVarInfo
-	name    string
-	scopeLv int
-	slot    int
-	startPC int
-	endPC   int
+	prev     *locVarInfo
+	name     string
+	scopeLv  int
+	slot     int
+	startPC  int
+	endPC    int
+	captured bool
 }
 
 type funcInfo struct {
@@ -134,19 +135,22 @@ func (self *funcInfo) enterScope(breakable bool) {
 }
 
 func (self *funcInfo) exitScope(endPC int) {
+	pendingBreakJmps := self.breaks[len(self.breaks)-1]
+	self.breaks = self.breaks[:len(self.breaks)-1]
+
+	a := self.getJmpArgA()
+	for _, pc := range pendingBreakJmps {
+		sBx := self.pc() - pc
+		i := (sBx+MAXARG_sBx)<<14 | a<<6 | OP_JMP
+		self.insts[pc] = uint32(i)
+	}
+
 	self.scopeLv--
 	for _, locVar := range self.locNames {
 		if locVar.scopeLv > self.scopeLv { // out of scope
 			locVar.endPC = endPC
 			self.removeLocVar(locVar)
 		}
-	}
-
-	pendingBreakJmps := self.breaks[len(self.breaks)-1]
-	self.breaks = self.breaks[:len(self.breaks)-1]
-
-	for _, pc := range pendingBreakJmps {
-		self.fixSbx(pc, self.pc()-pc)
 	}
 }
 
@@ -205,6 +209,7 @@ func (self *funcInfo) indexOfUpval(name string) int {
 		if locVar, found := self.parent.locNames[name]; found {
 			idx := len(self.upvalues)
 			self.upvalues[name] = upvalInfo{locVar.slot, -1, idx}
+			locVar.captured = true
 			return idx
 		}
 		if uvIdx := self.parent.indexOfUpval(name); uvIdx >= 0 {
@@ -214,6 +219,35 @@ func (self *funcInfo) indexOfUpval(name string) int {
 		}
 	}
 	return -1
+}
+
+func (self *funcInfo) closeOpenUpvals(line int) {
+	a := self.getJmpArgA()
+	if a > 0 {
+		self.emitJmp(line, a, 0)
+	}
+}
+
+func (self *funcInfo) getJmpArgA() int {
+	hasCapturedLocVars := false
+	minSlotOfLocVars := self.maxRegs
+	for _, locVar := range self.locNames {
+		if locVar.scopeLv == self.scopeLv {
+			for v := locVar; v != nil && v.scopeLv == self.scopeLv; v = v.prev {
+				if v.captured {
+					hasCapturedLocVars = true
+				}
+				if v.slot < minSlotOfLocVars && v.name[0] != '(' {
+					minSlotOfLocVars = v.slot
+				}
+			}
+		}
+	}
+	if hasCapturedLocVars {
+		return minSlotOfLocVars + 1
+	} else {
+		return 0
+	}
 }
 
 /* code */
@@ -252,7 +286,7 @@ func (self *funcInfo) emitABx(line, opcode, a, bx int) {
 	self.lineNums = append(self.lineNums, uint32(line))
 }
 
-func (self *funcInfo) emitAsBx(line, opcode, a, b, c int) {
+func (self *funcInfo) emitAsBx(line, opcode, a, b int) {
 	i := (b+MAXARG_sBx)<<14 | a<<6 | opcode
 	self.insts = append(self.insts, uint32(i))
 	self.lineNums = append(self.lineNums, uint32(line))
@@ -362,8 +396,8 @@ func (self *funcInfo) emitSelf(line, a, b, c int) {
 }
 
 // pc+=sBx; if (a) close all upvalues >= r[a - 1]
-func (self *funcInfo) emitJmp(line, sBx int) int {
-	self.emitAsBx(line, OP_JMP, 0, sBx, 0) // todo: a?
+func (self *funcInfo) emitJmp(line, a, sBx int) int {
+	self.emitAsBx(line, OP_JMP, a, sBx)
 	return len(self.insts) - 1
 }
 
@@ -378,12 +412,12 @@ func (self *funcInfo) emitTestSet(line, a, b, c int) {
 }
 
 func (self *funcInfo) emitForPrep(line, a, sBx int) int {
-	self.emitAsBx(line, OP_FORPREP, a, sBx, 0)
+	self.emitAsBx(line, OP_FORPREP, a, sBx)
 	return len(self.insts) - 1
 }
 
 func (self *funcInfo) emitForLoop(line, a, sBx int) int {
-	self.emitAsBx(line, OP_FORLOOP, a, sBx, 0)
+	self.emitAsBx(line, OP_FORLOOP, a, sBx)
 	return len(self.insts) - 1
 }
 
@@ -392,7 +426,7 @@ func (self *funcInfo) emitTForCall(line, a, c int) {
 }
 
 func (self *funcInfo) emitTForLoop(line, a, sBx int) {
-	self.emitAsBx(line, OP_TFORLOOP, a, sBx, 0)
+	self.emitAsBx(line, OP_TFORLOOP, a, sBx)
 }
 
 // r[a] = op r[b]
@@ -429,7 +463,7 @@ func (self *funcInfo) emitBinaryOp(line, op, a, b, c int) {
 		case TOKEN_OP_GE:
 			self.emitABC(line, OP_LE, 1, c, b)
 		}
-		self.emitJmp(line, 1)
+		self.emitJmp(line, 0, 1)
 		self.emitLoadBool(line, a, 0, 1)
 		self.emitLoadBool(line, a, 1, 0)
 	}
